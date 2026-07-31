@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fake Medicine Detector — Manufacturer Admin</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>💊 Manufacturer Portal</h1>
+        <p>Register a medicine batch and generate its tamper-proof QR code</p>
+    </header>
+
+    <nav>
+        <a href="index.html">Scan &amp; Verify</a>
+        <a href="admin.html" class="active">Manufacturer / Admin</a>
+    </nav>
+
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px;">
+        <span>Logged in as <strong id="loggedInUser"></strong></span>
+        <button id="logoutBtn" style="width:auto; margin:0; padding:8px 16px; background:#7f1d1d;">Log Out</button>
+    </div>
+
+    <div class="card">
+        <label for="medicineName">Medicine Name</label>
+        <input id="medicineName" placeholder="e.g. Paracetamol 500mg" />
+
+        <label for="batchNumber">Batch Number</label>
+        <input id="batchNumber" placeholder="e.g. BATCH-2026-0091" />
+
+        <label for="manufacturer">Manufacturer</label>
+        <input id="manufacturer" placeholder="e.g. Sunrise Pharma Ltd." />
+
+        <label for="manufactureDate">Manufacture Date</label>
+        <input id="manufactureDate" type="date" />
+
+        <label for="expiryDate">Expiry Date</label>
+        <input id="expiryDate" type="date" />
+
+        <button id="registerBtn">Register &amp; Generate QR</button>
+        <p id="errorMsg" style="color:#f87171; margin-top:10px;"></p>
+
+        <div class="qr-preview" id="qrPreview" style="display:none;">
+            <p>Print this QR code onto the medicine packaging:</p>
+            <img id="qrImage" alt="QR Code" width="220" height="220" />
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0;">Registered Medicines</h3>
+        <table id="medTable">
+            <thead>
+                <tr><th>Name</th><th>Batch</th><th>Manufacturer</th><th>Expiry</th><th>Scans</th><th>QR</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const API_BASE = "/api/medicines";
+
+// ---- Auth guard: redirect to login if no token ----
+const token = localStorage.getItem('token');
+if (!token) {
+    window.location.href = 'login.html';
+}
+document.getElementById('loggedInUser').textContent =
+    `${localStorage.getItem('username') || ''} (${localStorage.getItem('role') || ''})`;
+
+function authHeaders(extra = {}) {
+    return { ...extra, 'Authorization': `Bearer ${localStorage.getItem('token')}` };
+}
+
+function handleAuthFailure(res) {
+    if (res.status === 401 || res.status === 403) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        return true;
+    }
+    return false;
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() });
+    } catch (e) { /* ignore - logging out client-side regardless */ }
+    localStorage.clear();
+    window.location.href = 'login.html';
+});
+
+async function loadMedicines() {
+    try {
+        const res = await fetch(API_BASE, { headers: authHeaders() });
+        if (handleAuthFailure(res)) return;
+
+        const list = await res.json();
+        const tbody = document.querySelector('#medTable tbody');
+        tbody.innerHTML = '';
+        list.forEach(m => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${m.medicineName}</td>
+                <td>${m.batchNumber}</td>
+                <td>${m.manufacturer}</td>
+                <td>${m.expiryDate}</td>
+                <td>${m.scanCount ?? 0}</td>
+                <td><a href="${API_BASE}/${m.id}/qrcode" target="_blank">view</a></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error("Could not load medicines", err);
+    }
+}
+
+document.getElementById('registerBtn').addEventListener('click', async () => {
+    const errorMsg = document.getElementById('errorMsg');
+    errorMsg.textContent = '';
+
+    const payload = {
+        medicineName: document.getElementById('medicineName').value.trim(),
+        batchNumber: document.getElementById('batchNumber').value.trim(),
+        manufacturer: document.getElementById('manufacturer').value.trim(),
+        manufactureDate: document.getElementById('manufactureDate').value,
+        expiryDate: document.getElementById('expiryDate').value
+    };
+
+    try {
+        const res = await fetch(API_BASE, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload)
+        });
+
+        if (handleAuthFailure(res)) return;
+
+        if (!res.ok) {
+            const err = await res.json();
+            errorMsg.textContent = err.error || JSON.stringify(err);
+            return;
+        }
+
+        const saved = await res.json();
+        const qrPreview = document.getElementById('qrPreview');
+        const qrImage = document.getElementById('qrImage');
+        qrImage.src = `${API_BASE}/${saved.id}/qrcode?t=${Date.now()}`;
+        qrPreview.style.display = 'block';
+
+        loadMedicines();
+    } catch (err) {
+        errorMsg.textContent = 'Could not reach the backend. Is it running on port 8080?';
+    }
+});
+
+loadMedicines();
+</script>
+</body>
+</html>
