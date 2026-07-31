@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fake Medicine Detector — Login</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="container" style="max-width:420px;">
+    <header>
+        <h1>💊 Manufacturer Login</h1>
+        <p>Log in to register medicine batches and generate QR codes</p>
+    </header>
+
+    <div class="card">
+        <label for="username">Username</label>
+        <input id="username" placeholder="admin" autocomplete="username" />
+
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+
+        <button id="loginBtn">Log In</button>
+        <p id="errorMsg" style="color:#f87171; margin-top:10px;"></p>
+
+        <p style="text-align:center; margin-top:18px; font-size:0.85rem; color:#94a3b8;">
+            Default admin account for first run: <strong>admin</strong> / <strong>admin123</strong>
+        </p>
+
+        <hr style="border-color:#334155; margin:18px 0;" />
+
+        <p style="text-align:center; font-size:0.9rem;">New manufacturer?</p>
+        <label for="newUsername">Choose a username</label>
+        <input id="newUsername" placeholder="new username" />
+        <label for="newPassword">Choose a password</label>
+        <input id="newPassword" type="password" placeholder="new password" />
+        <button id="signupBtn" style="background:#334155;">Create Account</button>
+    </div>
+
+    <p style="text-align:center;"><a href="index.html" style="color:#94a3b8;">← Back to Scan &amp; Verify (no login needed)</a></p>
+</div>
+
+<script>
+const API_BASE = "/api/auth";
+const errorMsg = document.getElementById('errorMsg');
+
+function saveSessionAndRedirect(data) {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('username', data.username);
+    localStorage.setItem('role', data.role);
+    window.location.href = 'admin.html';
+}
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+    errorMsg.textContent = '';
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+        const res = await fetch(`${API_BASE}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorMsg.textContent = data.error || 'Login failed';
+            return;
+        }
+        saveSessionAndRedirect(data);
+    } catch (err) {
+        errorMsg.textContent = 'Could not reach the backend. Is it running on port 8080?';
+    }
+});
+
+document.getElementById('signupBtn').addEventListener('click', async () => {
+    errorMsg.textContent = '';
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newPassword').value;
+
+    if (!username || !password) {
+        errorMsg.textContent = 'Enter a username and password to sign up';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorMsg.textContent = data.error || 'Signup failed';
+            return;
+        }
+        saveSessionAndRedirect(data);
+    } catch (err) {
+        errorMsg.textContent = 'Could not reach the backend. Is it running on port 8080?';
+    }
+});
+</script>
+</body>
+</html>

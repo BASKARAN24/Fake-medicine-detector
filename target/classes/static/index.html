@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fake Medicine Detector — Scan &amp; Verify</title>
+<link rel="stylesheet" href="style.css" />
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>💊 Fake Medicine Detection System</h1>
+        <p>Scan a medicine's QR code to verify it instantly</p>
+    </header>
+
+    <nav>
+        <a href="index.html" class="active">Scan &amp; Verify</a>
+        <a href="login.html">Manufacturer Login</a>
+    </nav>
+
+    <div class="card">
+        <div id="reader" style="width:100%"></div>
+        <div style="text-align:center; margin-top:14px;">
+            <button id="toggleScanBtn">Start Camera Scan</button>
+        </div>
+
+        <label for="manualCode">Or enter the code manually</label>
+        <input id="manualCode" placeholder="e.g. 3f1a9b2c-4d5e-...." />
+        <button id="manualVerifyBtn">Verify Code</button>
+    </div>
+
+    <div id="resultBox" class="result-box card">
+        <div class="status-title" id="resultTitle"></div>
+        <div id="resultMessage"></div>
+        <div class="details" id="resultDetails"></div>
+    </div>
+</div>
+
+<script>
+const API_BASE = "/api/medicines";
+
+let html5QrCode;
+let scanning = false;
+
+const resultBox = document.getElementById('resultBox');
+const resultTitle = document.getElementById('resultTitle');
+const resultMessage = document.getElementById('resultMessage');
+const resultDetails = document.getElementById('resultDetails');
+
+function renderResult(data) {
+    resultBox.className = 'result-box card show';
+    resultDetails.innerHTML = '';
+
+    const statusMap = {
+        GENUINE:  { cls: 'result-genuine',  emoji: '✅', label: 'GENUINE' },
+        EXPIRED:  { cls: 'result-expired',  emoji: '⏳', label: 'EXPIRED' },
+        TAMPERED: { cls: 'result-tampered', emoji: '⚠️', label: 'TAMPERED / SUSPICIOUS' },
+        FAKE_OR_NOT_FOUND: { cls: 'result-fake', emoji: '❌', label: 'FAKE / NOT FOUND' }
+    };
+
+    const s = statusMap[data.status] || statusMap.FAKE_OR_NOT_FOUND;
+    resultBox.classList.add(s.cls);
+    resultTitle.textContent = `${s.emoji} ${s.label}`;
+    resultMessage.textContent = data.message;
+
+    if (data.medicineName) {
+        resultDetails.innerHTML = `
+            <strong>Medicine:</strong> ${data.medicineName}<br/>
+            <strong>Batch No:</strong> ${data.batchNumber}<br/>
+            <strong>Manufacturer:</strong> ${data.manufacturer}<br/>
+            <strong>Manufactured:</strong> ${data.manufactureDate}<br/>
+            <strong>Expiry:</strong> ${data.expiryDate}<br/>
+            <strong>Times Scanned:</strong> ${data.scanCount}
+        `;
+    }
+}
+
+async function verifyCode(code) {
+    try {
+        const res = await fetch(`${API_BASE}/verify/${encodeURIComponent(code)}`);
+        const data = await res.json();
+        renderResult(data);
+    } catch (err) {
+        resultBox.className = 'result-box card show result-fake';
+        resultTitle.textContent = '⚠️ Connection Error';
+        resultMessage.textContent = 'Could not reach the verification server. Is the backend running on port 8080?';
+        resultDetails.innerHTML = '';
+    }
+}
+
+document.getElementById('manualVerifyBtn').addEventListener('click', () => {
+    const code = document.getElementById('manualCode').value.trim();
+    if (code) verifyCode(code);
+});
+
+document.getElementById('toggleScanBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('toggleScanBtn');
+
+    if (!scanning) {
+        html5QrCode = new Html5Qrcode("reader");
+        try {
+            await html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: 250 },
+                (decodedText) => {
+                    verifyCode(decodedText);
+                }
+            );
+            scanning = true;
+            btn.textContent = "Stop Camera Scan";
+        } catch (err) {
+            alert("Could not start camera: " + err);
+        }
+    } else {
+        await html5QrCode.stop();
+        html5QrCode.clear();
+        scanning = false;
+        btn.textContent = "Start Camera Scan";
+    }
+});
+</script>
+</body>
+</html>
